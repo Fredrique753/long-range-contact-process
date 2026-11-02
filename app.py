@@ -2,17 +2,34 @@
 # STREAMLIT WEB APPLICATION
 # LONG-RANGE CONTACT PROCESS BOUNDARY PREDICTION
 # ============================================================
+#
+# This application uses the trained neural-network surrogate
+# to predict the boundary coordinate y from:
+#
+#   lambda = infection parameter
+#   alpha  = long-range exponent
+#   x      = horizontal boundary coordinate
+#
+# The application also displays the comparison results for
+# the four predictive models:
+#
+#   1. Linear Regression
+#   2. Random Forest
+#   3. Support Vector Regression
+#   4. Neural Network
+#
+# ============================================================
+
 
 import streamlit as st
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 import keras
-from tensorflow import keras
 
 import random
 import math
-import os
+
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -47,26 +64,56 @@ st.markdown(
 # LOAD TRAINED NEURAL-NETWORK MODEL
 # ============================================================
 
-# Get the absolute path to the directory containing app.py
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Point to the 'models' folder (plural) and the exact filename
-MODEL_PATH = os.path.join(BASE_DIR, "models", "contact_process_boundary_neural_network.keras")
+MODEL_PATH = "model/contact_process_boundary_neural_network.keras"
 
 st.sidebar.header("Neural-Network Model")
+
+model = None
+model_loaded = False
 
 try:
     model = keras.models.load_model(MODEL_PATH)
     model_loaded = True
     st.sidebar.success("Model loaded successfully.")
+
 except Exception as error:
-    model = None
-    model_loaded = False
     st.sidebar.error(
         "The trained model could not be loaded. "
         "Please ensure that the model file is included in the repository."
     )
     st.sidebar.code(str(error))
+
+
+# ============================================================
+# SCALING PARAMETERS
+# ============================================================
+#
+# IMPORTANT:
+# Replace these values with the actual mean and standard deviation
+# values saved in:
+#
+#   model/scaling_parameters.csv
+#
+# These values must match those used during model training.
+
+SCALING_PARAMETERS = {
+    "lambda": {
+        "mean": 0.4,
+        "sd": 0.1414
+    },
+    "alpha": {
+        "mean": 3.75,
+        "sd": 0.2041
+    },
+    "x": {
+        "mean": -2.15,
+        "sd": 30.0
+    },
+    "y": {
+        "mean": 37.14,
+        "sd": 30.0
+    }
+}
 
 
 # ============================================================
@@ -101,41 +148,29 @@ x_value = st.sidebar.slider(
 
 
 # ============================================================
-# SCALING PARAMETERS
-# ============================================================
-#
-# Replace these values with the actual training means and standard
-# deviations saved from your neural-network training script.
-#
-# They must match the values used when the model was trained.
-
-SCALING_PARAMETERS = {
-    "lambda": {"mean": 0.4, "sd": 0.1414},
-    "alpha": {"mean": 3.75, "sd": 0.2041},
-    "x": {"mean": -2.15, "sd": 30.0},
-    "y": {"mean": 37.14, "sd": 30.0}
-}
-
-
-# ============================================================
 # PREDICTION FUNCTION
 # ============================================================
 
-def predict_boundary_y(model, lambda_value, alpha_value, x_value):
+def predict_boundary_y(
+    trained_model,
+    lambda_input,
+    alpha_input,
+    x_input
+):
     """
     Predict the boundary coordinate y using the trained model.
     """
 
     lambda_scaled = (
-        lambda_value - SCALING_PARAMETERS["lambda"]["mean"]
+        lambda_input - SCALING_PARAMETERS["lambda"]["mean"]
     ) / SCALING_PARAMETERS["lambda"]["sd"]
 
     alpha_scaled = (
-        alpha_value - SCALING_PARAMETERS["alpha"]["mean"]
+        alpha_input - SCALING_PARAMETERS["alpha"]["mean"]
     ) / SCALING_PARAMETERS["alpha"]["sd"]
 
     x_scaled = (
-        x_value - SCALING_PARAMETERS["x"]["mean"]
+        x_input - SCALING_PARAMETERS["x"]["mean"]
     ) / SCALING_PARAMETERS["x"]["sd"]
 
     input_array = np.array(
@@ -143,7 +178,10 @@ def predict_boundary_y(model, lambda_value, alpha_value, x_value):
         dtype=np.float32
     )
 
-    prediction_scaled = model.predict(input_array, verbose=0)
+    prediction_scaled = trained_model.predict(
+        input_array,
+        verbose=0
+    )
 
     prediction = (
         prediction_scaled[0][0] * SCALING_PARAMETERS["y"]["sd"]
@@ -162,12 +200,24 @@ st.header("Boundary Prediction")
 col1, col2 = st.columns(2)
 
 with col1:
-    st.metric("Infection parameter λ", f"{lambda_value:.2f}")
-    st.metric("Long-range exponent α", f"{alpha_value:.2f}")
-    st.metric("Horizontal coordinate x", f"{x_value}")
+    st.metric(
+        "Infection parameter λ",
+        f"{lambda_value:.2f}"
+    )
+
+    st.metric(
+        "Long-range exponent α",
+        f"{alpha_value:.2f}"
+    )
+
+    st.metric(
+        "Horizontal coordinate x",
+        f"{x_value}"
+    )
 
 with col2:
     if model_loaded:
+
         predicted_y = predict_boundary_y(
             model,
             lambda_value,
@@ -193,6 +243,38 @@ with col2:
 
 
 # ============================================================
+# MODEL COMPARISON RESULTS
+# ============================================================
+
+st.header("Model Comparison")
+
+COMPARISON_FILE = (
+    "results/model_comparison/"
+    "model_comparison_results.csv"
+)
+
+try:
+    comparison_results = pd.read_csv(COMPARISON_FILE)
+
+    st.dataframe(comparison_results)
+
+    st.markdown(
+        """
+        The table above compares the predictive performance of the
+        four models using the test dataset.
+
+        The neural-network surrogate is used for the interactive
+        prediction in this application.
+        """
+    )
+
+except Exception:
+    st.warning(
+        "Model comparison results file was not found."
+    )
+
+
+# ============================================================
 # SIMPLE CONTACT PROCESS DEMONSTRATION
 # ============================================================
 
@@ -201,8 +283,11 @@ st.header("Simple Long-Range Contact Process Demonstration")
 st.markdown(
     """
     This is a simplified demonstration of the stochastic spreading
-    mechanism. It starts with one infected site at the origin and
+    mechanism. It begins with one infected site at the origin and
     generates a small set of sites that become infected over time.
+
+    The demonstration is illustrative and does not replace the
+    full Rcpp simulation used in the research project.
     """
 )
 
@@ -218,6 +303,7 @@ if st.button("Run demonstration simulation"):
         source = random.choice(infected_sites)
 
         u = random.random()
+
         radius = (1 - u) ** (-1 / (alpha_value - 2))
 
         theta = random.uniform(0, 2 * math.pi)
@@ -257,7 +343,7 @@ if st.button("Run demonstration simulation"):
 
 
 # ============================================================
-# PROJECT INFORMATION
+# ABOUT THE PROJECT
 # ============================================================
 
 st.header("About the Project")
