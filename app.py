@@ -178,8 +178,8 @@ alpha_value = st.sidebar.slider(
 
 x_value = st.sidebar.slider(
     "Horizontal boundary coordinate x",
-    min_value=-50.0,
-    max_value=50.0,
+    min_value=-200.0,
+    max_value=200.0,
     value=0.0,
     step=1.0
 )
