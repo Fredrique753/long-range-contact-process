@@ -12,6 +12,7 @@ from tensorflow import keras
 
 import random
 import math
+import os
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -46,7 +47,11 @@ st.markdown(
 # LOAD TRAINED NEURAL-NETWORK MODEL
 # ============================================================
 
-MODEL_PATH = "model/contact_process_boundary_neural_network.keras"
+# Get the absolute path to the directory containing app.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Point to the 'models' folder (plural) and the exact filename
+MODEL_PATH = os.path.join(BASE_DIR, "models", "contact_process_boundary_neural_network.keras")
 
 st.sidebar.header("Neural-Network Model")
 
