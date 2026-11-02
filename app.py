@@ -30,7 +30,7 @@ BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = (
     BASE_DIR
     / "models"
-    / "contact_process_boundary_neural_network.h5"  # Updated to .h5
+    / "contact_process_boundary_neural_network.h5"
 )
 
 SCALING_PATH = (
@@ -284,58 +284,85 @@ else:
     )
 
 # ============================================================
-# SIMPLE CONTACT PROCESS DEMONSTRATION
+# FULL CONTACT PROCESS DEMONSTRATION
 # ============================================================
 
-st.header("Simple Long-Range Contact Process Demonstration")
+st.header("Long-Range Contact Process Simulation")
 st.markdown(
     """
-    This section provides a small illustrative simulation of
-    long-range spreading.
-
-    It is intended for demonstration purposes and does not replace
-    the full simulation used to generate the research dataset.
+    This simulation models the stochastic spreading of the Contact Process. 
+    It starts with a single infected site at the origin and uses the long-range 
+    exponent **α** to determine how far the infection can jump. 
+    
+    Adjust the sliders in the sidebar and click the button to run the simulation.
     """
 )
 
-if st.button("Run demonstration simulation"):
-    random.seed(42)
-    infected_sites = [(0, 0)]
-    ever_infected = {(0, 0)}
+# Add a slider for the number of simulation steps
+steps = st.slider("Number of simulation steps", min_value=100, max_value=5000, value=1000, step=100)
 
-    for _ in range(100):
-        if len(infected_sites) == 0:
-            break
-            
-        source = random.choice(infected_sites)
-        u = random.random()
-        radius = (1 - u) ** (-1 / (alpha_value - 2))
-        theta = random.uniform(0, 2 * math.pi)
+if st.button("Run Full Simulation"):
+    with st.spinner("Simulating infection spread..."):
+        # Initialize variables
+        random.seed(42)
+        infected_sites = [(0, 0)]
+        ever_infected = {(0, 0)}
         
-        dx = int(round(radius * math.cos(theta)))
-        dy = int(round(radius * math.sin(theta)))
-        target = (source[0] + dx, source[1] + dy)
+        # We use a while loop to represent time steps (generations)
+        current_step = 0
+        
+        while current_step < steps:
+            # If the infection dies out completely, stop early
+            if len(infected_sites) == 0:
+                break
+                
+            # Pick a random infected site to act as the source
+            source = random.choice(infected_sites)
+            
+            # 1. Infection attempt (Long-range jump)
+            u = random.random()
+            # The inverse transform sampling for a heavy-tailed distribution
+            radius = (1 - u) ** (-1 / (alpha_value - 2))
+            
+            theta = random.uniform(0, 2 * math.pi)
+            
+            dx = int(round(radius * math.cos(theta)))
+            dy = int(round(radius * math.sin(theta)))
+            
+            target = (source[0] + dx, source[1] + dy)
+            
+            # If the target hasn't been infected yet, add it
+            if target not in ever_infected:
+                infected_sites.append(target)
+                ever_infected.add(target)
+                
+            # 2. Recovery attempt (based on lambda parameter)
+            # Higher lambda = lower recovery rate
+            if random.random() < (1 - lambda_value) and len(infected_sites) > 1:
+                recovered_site = random.choice(infected_sites)
+                infected_sites.remove(recovered_site)
+                
+            current_step += 1
 
-        if target not in ever_infected:
-            infected_sites.append(target)
-            ever_infected.add(target)
+        # Convert results to a DataFrame
+        demonstration_data = pd.DataFrame(
+            list(ever_infected),
+            columns=["x", "y"]
+        )
 
-        if random.random() < 0.20 and len(infected_sites) > 1:
-            recovered_site = random.choice(infected_sites)
-            infected_sites.remove(recovered_site)
-
-    demonstration_data = pd.DataFrame(
-        list(ever_infected),
-        columns=["x", "y"]
-    )
-
-    st.success(
-        f"The demonstration generated "
-        f"{len(ever_infected)} sites that were infected "
-        f"at least once."
-    )
-
-    st.scatter_chart(demonstration_data, x="x", y="y")
+        # Display results
+        st.success(
+            f"Simulation complete! Generated **{len(ever_infected)}** unique infected sites "
+            f"over {current_step} steps."
+        )
+        
+        # Display interactive map
+        st.scatter_chart(
+            demonstration_data, 
+            x="x", 
+            y="y",
+            use_container_width=True
+        )
 
 # ============================================================
 # ABOUT THE PROJECT
