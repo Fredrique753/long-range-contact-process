@@ -273,7 +273,14 @@ st.markdown(
 if COMPARISON_FILE.exists():
     try:
         comparison_results = pd.read_csv(COMPARISON_FILE)
-        st.dataframe(comparison_results, use_container_width=True)
+        
+        # Format the table: hide index and set precision to 4 decimal places
+        st.dataframe(
+            comparison_results.style.format(precision=4), 
+            hide_index=True, 
+            use_container_width=True
+        )
+        
     except Exception as error:
         st.warning("The model comparison file exists but could not be read.")
         st.code(str(error))
