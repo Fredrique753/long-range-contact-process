@@ -1,5 +1,5 @@
 streamlit
-numpy
+numpy==1.26.4
 pandas
 tensorflow==2.15.1
 keras==2.15.0
