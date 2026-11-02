@@ -2,32 +2,14 @@
 # STREAMLIT WEB APPLICATION
 # LONG-RANGE CONTACT PROCESS BOUNDARY PREDICTION
 # ============================================================
-#
-# Predicts:
-#
-#       y = f(lambda, alpha, x)
-#
-# using the trained Neural Network surrogate model.
-#
-# Input variables:
-#       1. lambda - infection parameter
-#       2. alpha  - long-range exponent
-#       3. x      - horizontal boundary coordinate
-#
-# Target variable:
-#       y      - vertical boundary coordinate
-#
-# ============================================================
-
-
-import os
-import random
-import math
 
 import streamlit as st
 import numpy as np
 import pandas as pd
 import keras
+from pathlib import Path
+import random
+import math
 
 
 # ============================================================
@@ -42,33 +24,97 @@ st.set_page_config(
 
 
 # ============================================================
-# FILE PATHS
+# PROJECT PATHS
 # ============================================================
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = Path(__file__).resolve().parent
 
-MODEL_PATH = os.path.join(
-    BASE_DIR,
-    "model",
-    "contact_process_boundary_neural_network.keras"
+MODEL_PATH = (
+    BASE_DIR
+    / "model"
+    / "contact_process_boundary_neural_network.keras"
 )
 
-SCALING_FILE = os.path.join(
-    BASE_DIR,
-    "model",
-    "scaling_parameters.csv"
+SCALING_PATH = (
+    BASE_DIR
+    / "model"
+    / "scaling_parameters.csv"
 )
 
-COMPARISON_FILE = os.path.join(
-    BASE_DIR,
-    "results",
-    "model_comparison",
-    "model_comparison_results.csv"
+COMPARISON_FILE = (
+    BASE_DIR
+    / "results"
+    / "model_comparison"
+    / "model_comparison_results.csv"
 )
 
 
 # ============================================================
-# PAGE TITLE
+# LOAD SCALING PARAMETERS
+# ============================================================
+
+@st.cache_data
+def load_scaling_parameters():
+
+    if not SCALING_PATH.exists():
+        raise FileNotFoundError(
+            f"Scaling parameters file not found:\n{SCALING_PATH}"
+        )
+
+    scaling_df = pd.read_csv(SCALING_PATH)
+
+    required_columns = {"variable", "mean", "sd"}
+
+    if not required_columns.issubset(scaling_df.columns):
+        raise ValueError(
+            "scaling_parameters.csv must contain the columns: "
+            "variable, mean, sd"
+        )
+
+    scaling = {}
+
+    for _, row in scaling_df.iterrows():
+
+        scaling[row["variable"]] = {
+            "mean": float(row["mean"]),
+            "sd": float(row["sd"])
+        }
+
+    required_variables = ["lambda", "alpha", "x", "y"]
+
+    for variable in required_variables:
+
+        if variable not in scaling:
+            raise ValueError(
+                f"Missing scaling parameters for '{variable}'"
+            )
+
+    return scaling
+
+
+# ============================================================
+# LOAD NEURAL-NETWORK MODEL
+# ============================================================
+
+@st.cache_resource
+def load_model():
+
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(
+            f"Model file not found:\n{MODEL_PATH}"
+        )
+
+    # compile=False is appropriate because the app only predicts.
+    model = keras.models.load_model(
+        MODEL_PATH,
+        compile=False
+    )
+
+    return model
+
+
+# ============================================================
+# APPLICATION TITLE
 # ============================================================
 
 st.title("Long-Range Contact Process")
@@ -79,176 +125,72 @@ st.subheader(
 
 st.markdown(
     """
-This application demonstrates a neural-network surrogate model for the
-long-range Contact Process.
+    This application demonstrates a neural-network surrogate model
+    for the long-range Contact Process.
 
-The model predicts the vertical boundary coordinate \(y\) from:
+    The trained neural network predicts the vertical boundary
+    coordinate **y** using:
 
-- the infection parameter \(\lambda\),
-- the long-range exponent \(\alpha\),
-- and the horizontal boundary coordinate \(x\).
-
-Therefore:
-
-\[
-y = f(\lambda,\alpha,x)
-\]
-"""
+    - the infection parameter **λ (lambda)**,
+    - the long-range exponent **α (alpha)**,
+    - and the horizontal boundary coordinate **x**.
+    """
 )
 
 
 # ============================================================
-# LOAD NEURAL NETWORK MODEL
+# LOAD FILES
 # ============================================================
-
-@st.cache_resource
-def load_neural_network():
-
-    if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(
-            f"Model file was not found:\n{MODEL_PATH}"
-        )
-
-    loaded_model = keras.models.load_model(
-        MODEL_PATH,
-        compile=False
-    )
-
-    return loaded_model
-
-
-# ============================================================
-# LOAD SCALING PARAMETERS
-# ============================================================
-
-@st.cache_data
-def load_scaling_parameters():
-
-    if not os.path.exists(SCALING_FILE):
-        raise FileNotFoundError(
-            f"Scaling file was not found:\n{SCALING_FILE}"
-        )
-
-    scaling_data = pd.read_csv(SCALING_FILE)
-
-    required_columns = {
-        "variable",
-        "mean",
-        "sd"
-    }
-
-    if not required_columns.issubset(
-        scaling_data.columns
-    ):
-        raise ValueError(
-            "scaling_parameters.csv must contain "
-            "the columns: variable, mean, sd"
-        )
-
-    scaling = {}
-
-    for _, row in scaling_data.iterrows():
-
-        scaling[str(row["variable"])] = {
-
-            "mean": float(row["mean"]),
-
-            "sd": float(row["sd"])
-
-        }
-
-    required_variables = [
-        "lambda",
-        "alpha",
-        "x",
-        "y"
-    ]
-
-    missing_variables = [
-
-        variable
-
-        for variable in required_variables
-
-        if variable not in scaling
-
-    ]
-
-    if len(missing_variables) > 0:
-
-        raise ValueError(
-            "Missing scaling parameters for: "
-            + ", ".join(missing_variables)
-        )
-
-    return scaling
-
-
-# ============================================================
-# LOAD MODEL AND SCALING PARAMETERS
-# ============================================================
-
-st.sidebar.header("Neural-Network Model")
 
 model = None
 scaling_parameters = None
-model_loaded = False
+
+try:
+
+    scaling_parameters = load_scaling_parameters()
+
+except Exception as error:
+
+    st.error(
+        "The scaling parameters could not be loaded."
+    )
+
+    st.code(str(error))
 
 
 try:
 
-    model = load_neural_network()
+    model = load_model()
 
-    scaling_parameters = (
-        load_scaling_parameters()
+except Exception as error:
+
+    st.error(
+        "The trained neural-network model could not be loaded."
     )
 
-    # --------------------------------------------------------
-    # VERIFY NUMBER OF INPUT VARIABLES
-    # --------------------------------------------------------
-
-    input_shape = model.input_shape
-
-    if isinstance(input_shape, list):
-
-        expected_features = input_shape[0][-1]
-
-    else:
-
-        expected_features = input_shape[-1]
+    st.code(str(error))
 
 
-    if expected_features != 3:
+# ============================================================
+# SIDEBAR
+# ============================================================
 
-        raise ValueError(
-            f"The deployed model expects "
-            f"{expected_features} input variables, "
-            "but this application requires exactly "
-            "3 inputs: lambda, alpha, and x."
-        )
+st.sidebar.header("Neural-Network Model")
 
-
-    model_loaded = True
+if model is not None:
 
     st.sidebar.success(
         "Neural-network model loaded successfully."
     )
 
-    st.sidebar.info(
-        "Model inputs: λ, α, x"
+    st.sidebar.write(
+        "**Architecture:** 3 → 64 → 32 → 16 → 1"
     )
 
-
-except Exception as error:
-
-    model_loaded = False
+else:
 
     st.sidebar.error(
-        "The trained model could not be loaded correctly."
-    )
-
-    st.sidebar.code(
-        str(error)
+        "The trained model could not be loaded."
     )
 
 
@@ -260,47 +202,29 @@ st.sidebar.header("Model Inputs")
 
 
 lambda_value = st.sidebar.slider(
-
     "Infection parameter λ",
-
     min_value=0.20,
-
     max_value=0.60,
-
     value=0.40,
-
     step=0.05
-
 )
 
 
 alpha_value = st.sidebar.slider(
-
     "Long-range exponent α",
-
     min_value=3.50,
-
     max_value=4.00,
-
     value=3.75,
-
     step=0.25
-
 )
 
 
 x_value = st.sidebar.slider(
-
     "Horizontal boundary coordinate x",
-
-    min_value=-126,
-
-    max_value=111,
-
-    value=0,
-
-    step=1
-
+    min_value=-50.0,
+    max_value=50.0,
+    value=0.0,
+    step=1.0
 )
 
 
@@ -309,271 +233,204 @@ x_value = st.sidebar.slider(
 # ============================================================
 
 def predict_boundary_y(
-
     trained_model,
-
     scaling,
-
     lambda_input,
-
     alpha_input,
-
     x_input
-
 ):
 
     # --------------------------------------------------------
-    # SCALE INPUT VARIABLES
+    # STANDARDIZE INPUT VARIABLES
     # --------------------------------------------------------
 
     lambda_scaled = (
-
         lambda_input
         - scaling["lambda"]["mean"]
-
     ) / scaling["lambda"]["sd"]
 
 
     alpha_scaled = (
-
         alpha_input
         - scaling["alpha"]["mean"]
-
     ) / scaling["alpha"]["sd"]
 
 
     x_scaled = (
-
         x_input
         - scaling["x"]["mean"]
-
     ) / scaling["x"]["sd"]
 
 
     # --------------------------------------------------------
-    # IMPORTANT:
-    #
-    # INPUT ORDER MUST MATCH MODEL TRAINING:
-    #
-    #       lambda, alpha, x
-    #
+    # CREATE MODEL INPUT
     # --------------------------------------------------------
 
     input_array = np.array(
-
         [[
-
             lambda_scaled,
-
             alpha_scaled,
-
             x_scaled
-
         ]],
-
         dtype=np.float32
-
     )
 
 
     # --------------------------------------------------------
-    # PREDICT SCALED y
+    # NEURAL-NETWORK PREDICTION
     # --------------------------------------------------------
 
     prediction_scaled = trained_model.predict(
-
         input_array,
-
         verbose=0
-
     )
 
 
     prediction_scaled = float(
-
-        np.asarray(
-            prediction_scaled
-        ).reshape(-1)[0]
-
+        np.asarray(prediction_scaled).flatten()[0]
     )
 
 
     # --------------------------------------------------------
-    # CONVERT BACK TO ORIGINAL y SCALE
+    # TRANSFORM PREDICTION BACK TO ORIGINAL SCALE
     # --------------------------------------------------------
 
     prediction = (
-
         prediction_scaled
         * scaling["y"]["sd"]
-
         + scaling["y"]["mean"]
-
     )
 
 
-    return float(prediction)
+    return prediction
 
 
 # ============================================================
-# MAIN PREDICTION SECTION
+# BOUNDARY PREDICTION
 # ============================================================
 
 st.header("Boundary Prediction")
 
-
 col1, col2 = st.columns(2)
 
 
+# ------------------------------------------------------------
+# INPUT DISPLAY
+# ------------------------------------------------------------
+
 with col1:
 
-    st.metric(
+    st.subheader("Selected Parameters")
 
+    st.metric(
         "Infection parameter λ",
-
         f"{lambda_value:.2f}"
-
     )
 
-
     st.metric(
-
         "Long-range exponent α",
-
         f"{alpha_value:.2f}"
-
     )
-
 
     st.metric(
-
-        "Horizontal boundary coordinate x",
-
-        f"{x_value:.0f}"
-
+        "Horizontal coordinate x",
+        f"{x_value:.2f}"
     )
 
+
+# ------------------------------------------------------------
+# PREDICTION DISPLAY
+# ------------------------------------------------------------
 
 with col2:
 
-    if model_loaded:
+    st.subheader("Neural-Network Prediction")
+
+    if (
+        model is not None
+        and scaling_parameters is not None
+    ):
 
         try:
 
             predicted_y = predict_boundary_y(
-
                 model,
-
                 scaling_parameters,
-
                 lambda_value,
-
                 alpha_value,
-
                 x_value
-
             )
-
 
             st.metric(
-
                 "Predicted boundary coordinate y",
-
                 f"{predicted_y:.2f}"
-
             )
-
 
             st.success(
-
-                "The neural-network surrogate has "
-                "successfully predicted y."
-
+                "Prediction completed successfully."
             )
-
 
         except Exception as error:
 
             st.error(
-
-                "Prediction failed."
-
+                "An error occurred while making the prediction."
             )
 
-            st.code(
-
-                str(error)
-
-            )
-
+            st.code(str(error))
 
     else:
 
         st.warning(
-
-            "Prediction is unavailable because "
-            "the trained neural-network model "
-            "was not loaded correctly."
-
+            "Prediction is unavailable because the model or "
+            "scaling parameters could not be loaded."
         )
 
 
 # ============================================================
-# MODEL COMPARISON RESULTS
+# MODEL COMPARISON
 # ============================================================
 
 st.header("Model Comparison")
 
+st.markdown(
+    """
+    The research compares four predictive approaches:
 
-try:
+    1. Linear Regression
+    2. Random Forest
+    3. Support Vector Regression
+    4. Neural Network
+    """
+)
 
-    if not os.path.exists(COMPARISON_FILE):
 
-        raise FileNotFoundError(
-            "Model comparison results file was not found."
+if COMPARISON_FILE.exists():
+
+    try:
+
+        comparison_results = pd.read_csv(
+            COMPARISON_FILE
         )
 
+        st.dataframe(
+            comparison_results,
+            use_container_width=True
+        )
 
-    comparison_results = pd.read_csv(
-        COMPARISON_FILE
-    )
+    except Exception as error:
 
+        st.warning(
+            "The model comparison file exists but could not "
+            "be read."
+        )
 
-    st.dataframe(
+        st.code(str(error))
 
-        comparison_results,
+else:
 
-        use_container_width=True
-
-    )
-
-
-    st.markdown(
-        """
-The models are compared using predictive performance measures obtained
-from the test dataset.
-
-The four predictive models are:
-
-1. Linear Regression
-2. Random Forest
-3. Support Vector Regression
-4. Neural Network
-
-The Neural Network is used for the interactive surrogate prediction
-of the boundary coordinate \(y\).
-"""
-    )
-
-
-except Exception as error:
-
-    st.warning(
-        "Model comparison results could not be loaded."
-    )
-
-    st.caption(
-        str(error)
+    st.info(
+        "The model comparison results file has not yet been "
+        "found in the repository."
     )
 
 
@@ -585,45 +442,31 @@ st.header(
     "Simple Long-Range Contact Process Demonstration"
 )
 
-
 st.markdown(
     """
-This section provides a simplified illustration of the stochastic
-long-range spreading mechanism.
+    This section provides a small illustrative simulation of
+    long-range spreading.
 
-It is included only as a visual demonstration and does not replace
-the full Contact Process simulation used to generate the research
-dataset.
-"""
+    It is intended for demonstration purposes and does not replace
+    the full simulation used to generate the research dataset.
+    """
 )
 
 
-if st.button(
-    "Run demonstration simulation"
-):
+if st.button("Run demonstration simulation"):
 
     random.seed(42)
 
-
-    infected_sites = [
-
-        (0, 0)
-
-    ]
-
+    infected_sites = [(0, 0)]
 
     ever_infected = {
-
         (0, 0)
-
     }
 
 
     for _ in range(100):
 
-
         if len(infected_sites) == 0:
-
             break
 
 
@@ -636,19 +479,14 @@ if st.button(
 
 
         radius = (
-
             (1 - u)
             ** (-1 / (alpha_value - 2))
-
         )
 
 
         theta = random.uniform(
-
             0,
-
             2 * math.pi
-
         )
 
 
@@ -667,11 +505,8 @@ if st.button(
 
 
         target = (
-
             source[0] + dx,
-
             source[1] + dy
-
         )
 
 
@@ -687,19 +522,13 @@ if st.button(
 
 
         if (
-
             random.random() < 0.20
-
-            and
-
-            len(infected_sites) > 1
-
+            and len(infected_sites) > 1
         ):
 
             recovered_site = random.choice(
                 infected_sites
             )
-
 
             infected_sites.remove(
                 recovered_site
@@ -707,31 +536,22 @@ if st.button(
 
 
     demonstration_data = pd.DataFrame(
-
         list(ever_infected),
-
         columns=["x", "y"]
-
     )
 
 
     st.success(
-
         f"The demonstration generated "
-        f"{len(ever_infected)} sites that were "
-        "infected at least once."
-
+        f"{len(ever_infected)} sites that were infected "
+        f"at least once."
     )
 
 
     st.scatter_chart(
-
         demonstration_data,
-
         x="x",
-
         y="y"
-
     )
 
 
@@ -744,51 +564,46 @@ st.header("About the Project")
 
 st.markdown(
     """
-This application supports research on the asymptotic growth geometry
-of a long-range Contact Process.
+    This application supports research on the asymptotic growth
+    geometry of a **long-range Contact Process**.
 
-The Contact Process is a stochastic interacting-particle system in
-which occupied sites may recover, while infection spreads from
-occupied sites to other sites.
+    The Contact Process is a stochastic interacting-particle system
+    in which occupied sites may recover while infection spreads to
+    other sites.
 
-In the long-range version, infection can occur beyond immediate
-neighbours. The long-range exponent \(\alpha\) controls the effect of
-distance on the infection mechanism.
+    In the long-range version, infection can spread beyond immediate
+    neighbouring sites. The parameter **α** controls the long-range
+    behaviour of the infection mechanism.
 
-The neural-network surrogate model approximates the relationship
-between:
+    The neural network acts as a **surrogate model**, learning the
+    relationship between:
 
-\[
-(\lambda,\alpha,x)
-\]
+    - infection parameter **λ**,
+    - long-range exponent **α**,
+    - horizontal boundary coordinate **x**,
 
-and the boundary coordinate:
-
-\[
-y
-\]
-
-That is:
-
-\[
-\boxed{
-y=f(\lambda,\alpha,x)
-}
-\]
-"""
+    and the resulting vertical boundary coordinate **y**.
+    """
 )
 
 
 st.markdown(
     """
-**Research question**
+    ### Research Question
 
-Can a neural-network surrogate efficiently predict the boundary
-geometry generated by a long-range Contact Process?
-"""
+    **Can machine-learning surrogate models efficiently predict the
+    boundary geometry generated by a long-range Contact Process?**
+    """
 )
 
 
 # ============================================================
-# END OF APPLICATION
+# FOOTER
 # ============================================================
+
+st.divider()
+
+st.caption(
+    "Long-Range Contact Process | "
+    "Simulation and Machine-Learning Surrogate Modelling"
+)
