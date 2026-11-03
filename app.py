@@ -11,7 +11,7 @@ from pathlib import Path
 import random
 import math
 from collections import deque
-import matplotlib.pyplot as plt
+import altair as alt  # <-- Added Altair for strict axis limits
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -352,22 +352,14 @@ if st.button("Run Full Simulation"):
             f"over {current_step} steps."
         )
         
-        # Using Matplotlib to strictly force the x-axis to -50 to 50
-        fig, ax = plt.subplots(figsize=(10, 5))
-        
-        # Plot the points
-        ax.scatter(demonstration_data["x"], demonstration_data["y"], alpha=0.6, color="#4C9AFF", s=20)
-        
-        # Hard-set the x-axis boundaries to -50 and 50
-        ax.set_xlim(-50, 50)
-        
-        # Add a grid and labels
-        ax.grid(True, linestyle='--', alpha=0.5)
-        ax.set_xlabel("Horizontal coordinate x (Locked to -50 to 50)")
-        ax.set_ylabel("Boundary coordinate y")
-        
-        # Draw the plot in Streamlit
-        st.pyplot(fig)
+        # Using Altair to strictly force the x-axis to -50 to 50
+        chart = alt.Chart(demonstration_data).mark_circle(size=40, opacity=0.7, color="#4C9AFF").encode(
+            x=alt.X('x', scale=alt.Scale(domain=[-50, 50]), title="Horizontal coordinate x (Locked to -50 to 50)"),
+            y=alt.Y('y', scale=alt.Scale(zero=False), title="Boundary coordinate y"),
+            tooltip=['x', 'y']
+        ).interactive()
+
+        st.altair_chart(chart, use_container_width=True)
 
 # ============================================================
 # ABOUT THE PROJECT
