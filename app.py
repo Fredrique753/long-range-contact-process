@@ -11,7 +11,7 @@ from pathlib import Path
 import random
 import math
 from collections import deque
-import altair as alt  # <-- Added Altair for strict axis limits
+import altair as alt
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -196,22 +196,15 @@ def predict_boundary_y(
     alpha_input,
     x_input
 ):
-    # STANDARDIZE INPUT VARIABLES
     lambda_scaled = (lambda_input - scaling["lambda"]["mean"]) / scaling["lambda"]["sd"]
     alpha_scaled = (alpha_input - scaling["alpha"]["mean"]) / scaling["alpha"]["sd"]
     x_scaled = (x_input - scaling["x"]["mean"]) / scaling["x"]["sd"]
 
-    # CREATE MODEL INPUT
-    input_array = np.array(
-        [[lambda_scaled, alpha_scaled, x_scaled]],
-        dtype=np.float32
-    )
+    input_array = np.array([[lambda_scaled, alpha_scaled, x_scaled]], dtype=np.float32)
 
-    # NEURAL-NETWORK PREDICTION
     prediction_scaled = trained_model.predict(input_array, verbose=0)
     prediction_scaled = float(np.asarray(prediction_scaled).flatten()[0])
 
-    # TRANSFORM PREDICTION BACK TO ORIGINAL SCALE
     prediction = (
         prediction_scaled
         * scaling["y"]["sd"]
@@ -274,14 +267,11 @@ st.markdown(
 if COMPARISON_FILE.exists():
     try:
         comparison_results = pd.read_csv(COMPARISON_FILE)
-        
-        # Format the table: hide index and set precision to 4 decimal places
         st.dataframe(
             comparison_results.style.format(precision=4), 
             hide_index=True, 
             use_container_width=True
         )
-        
     except Exception as error:
         st.warning("The model comparison file exists but could not be read.")
         st.code(str(error))
@@ -301,17 +291,13 @@ st.markdown(
     This simulation models the stochastic spreading of the Contact Process. 
     It starts with a single infected site at the origin and uses the long-range 
     exponent **α** to determine how far the infection can jump. 
-    
-    Adjust the sliders in the sidebar and click the button to run the simulation.
     """
 )
 
-# Add a slider for the number of simulation steps
 steps = st.slider("Number of simulation steps", min_value=100, max_value=10000, value=2000, step=100)
 
 if st.button("Run Full Simulation"):
     with st.spinner("Simulating infection spread..."):
-        # Initialize variables
         random.seed(42)
         infected_sites = [(0, 0)]
         ever_infected = {(0, 0)}
@@ -338,7 +324,7 @@ if st.button("Run Full Simulation"):
                 infected_sites.append(target)
                 ever_infected.add(target)
                 
-            # 2. Recovery attempt (based on lambda parameter)
+            # 2. Recovery attempt
             if random.random() < (1 - lambda_value) and len(infected_sites) > 1:
                 recovered_site = random.choice(infected_sites)
                 infected_sites.remove(recovered_site)
@@ -352,14 +338,28 @@ if st.button("Run Full Simulation"):
             f"over {current_step} steps."
         )
         
-        # Using Altair to strictly force the x-axis to -50 to 50
-        chart = alt.Chart(demonstration_data).mark_circle(size=40, opacity=0.7, color="#4C9AFF").encode(
-            x=alt.X('x', scale=alt.Scale(domain=[-50, 50]), title="Horizontal coordinate x (Locked to -50 to 50)"),
-            y=alt.Y('y', scale=alt.Scale(zero=False), title="Boundary coordinate y"),
+        # --- THIS IS THE FIX ---
+        # Filter the data so outliers don't zoom the graph out
+        filtered_data = demonstration_data[
+            (demonstration_data["x"] >= -50) & 
+            (demonstration_data["x"] <= 50) &
+            (demonstration_data["y"] >= -100) & 
+            (demonstration_data["y"] <= 100)
+        ]
+
+        # Plot the filtered data
+        chart = alt.Chart(filtered_data).mark_circle(size=40, opacity=0.7, color="#4C9AFF").encode(
+            x=alt.X('x', scale=alt.Scale(domain=[-50, 50]), title="Horizontal coordinate x"),
+            y=alt.Y('y', scale=alt.Scale(domain=[-100, 100]), title="Boundary coordinate y"),
             tooltip=['x', 'y']
         ).interactive()
 
         st.altair_chart(chart, use_container_width=True)
+        
+        # Let the user know if we hid some extreme jumps
+        hidden_count = len(demonstration_data) - len(filtered_data)
+        if hidden_count > 0:
+            st.info(f"Note: {hidden_count} extreme long-range jumps were hidden from the plot to keep the view centered.")
 
 # ============================================================
 # ABOUT THE PROJECT
@@ -532,7 +532,6 @@ if st.button("Run Live Code Demonstration"):
             res = res + inorder(root.right)
         return res
 
-    # Build tree from boundary x coordinates
     tree_root = None
     tree_root = insert(tree_root, -10, 20.5)
     tree_root = insert(tree_root, 5, 35.2)
@@ -563,18 +562,17 @@ if st.button("Run Live Code Demonstration"):
 
     class EmpiricalModel(BoundaryModel):
         def predict(self, x):
-            return x * 2.5  # Linear interpolation example
+            return x * 2.5
 
     class MeanModel(BoundaryModel):
         def predict(self, x):
-            return 37.2  # Always predicts the mean
+            return 37.2
 
     models = [EmpiricalModel("Empirical"), MeanModel("Mean")]
     
     x_test = 10
     results = []
     for m in models:
-        # Polymorphism: We call the same .predict() method on different objects
         results.append({"Model": m.name, "Input x": x_test, "Prediction": m.predict(x_test)})
     
     st.dataframe(pd.DataFrame(results), hide_index=True)
