@@ -1,6 +1,6 @@
 # ============================================================
 # STREAMLIT WEB APPLICATION
-# LONG-RANGE CONTACT PROCESS BOUNDARY PREDICTION
+# ASYMPTOTIC LIMIT-SHAPE BOUNDARY PREDICTION
 # ============================================================
 
 import streamlit as st
@@ -18,7 +18,7 @@ import altair as alt
 # ============================================================
 
 st.set_page_config(
-    page_title="Long-Range Contact Process",
+    page_title="Limit-Shape Boundary Prediction",
     page_icon="🦠",
     layout="wide"
 )
@@ -105,22 +105,24 @@ def load_model():
 # APPLICATION TITLE
 # ============================================================
 
-st.title("Long-Range Contact Process")
+st.title("Asymptotic Limit-Shape Boundary Prediction")
 st.subheader(
-    "Neural-Network Prediction of the Boundary Coordinate y"
+    "Neural-Network Surrogate Modeling of the Long-Range Contact Process"
 )
 
 st.markdown(
     """
-    This application demonstrates a neural-network surrogate model
-    for the long-range Contact Process.
-
-    The trained neural network predicts the vertical boundary
-    coordinate **y** using:
-
-    - the infection parameter **λ (lambda)**,
-    - the long-range exponent **α (alpha)**,
-    - and the horizontal boundary coordinate **x**.
+    **Research Objective:** Predict the boundary of the asymptotic limit shape.
+    
+    **Neural-Network Output:** Estimate the boundary ordinate \(y\) for given values of 
+    \(\\lambda\), \(\\alpha\), and \(x\). 
+    
+    The collection of predicted coordinates reconstructs the boundary:
+    \[
+    \\hat{B}_{\\lambda, \\alpha} = \{(x, \\hat{y}) : \\hat{y} = f_\\theta(\\lambda, \\alpha, x)\}
+    \]
+    
+    *(Note: Because the simulation uses a finite time horizon \(t_{max} = 10\), this model predicts the simulated boundary shape, which serves as an approximation of the true asymptotic limit shape.)*
     """
 )
 
@@ -177,14 +179,6 @@ alpha_value = st.sidebar.slider(
     step=0.25
 )
 
-x_value = st.sidebar.slider(
-    "Horizontal boundary coordinate x",
-    min_value=-50.0,
-    max_value=50.0,
-    value=0.0,
-    step=1.0
-)
-
 # ============================================================
 # PREDICTION FUNCTION
 # ============================================================
@@ -214,39 +208,45 @@ def predict_boundary_y(
     return prediction
 
 # ============================================================
-# BOUNDARY PREDICTION
+# BOUNDARY SHAPE VISUALIZATION
 # ============================================================
 
-st.header("Boundary Prediction")
-col1, col2 = st.columns(2)
+st.header("Reconstructing the Limit-Shape Boundary")
 
-with col1:
-    st.subheader("Selected Parameters")
-    st.metric("Infection parameter λ", f"{lambda_value:.2f}")
-    st.metric("Long-range exponent α", f"{alpha_value:.2f}")
-    st.metric("Horizontal coordinate x", f"{x_value:.2f}")
+if (model is not None and scaling_parameters is not None):
+    try:
+        # Generate a dense array of x-values to reconstruct the curve
+        x_grid = np.linspace(-50, 50, 100)
+        
+        # Predict y for every x in the grid
+        y_predictions = [
+            predict_boundary_y(model, scaling_parameters, lambda_value, alpha_value, x) 
+            for x in x_grid
+        ]
+        
+        # Create a DataFrame for Altair
+        curve_data = pd.DataFrame({
+            "x": x_grid,
+            "y": y_predictions
+        })
 
-with col2:
-    st.subheader("Neural-Network Prediction")
-    if (model is not None and scaling_parameters is not None):
-        try:
-            predicted_y = predict_boundary_y(
-                model,
-                scaling_parameters,
-                lambda_value,
-                alpha_value,
-                x_value
-            )
-            st.metric("Predicted boundary coordinate y", f"{predicted_y:.2f}")
-            st.success("Prediction completed successfully.")
-        except Exception as error:
-            st.error("An error occurred while making the prediction.")
-            st.code(str(error))
-    else:
-        st.warning(
-            "Prediction is unavailable because the model or "
-            "scaling parameters could not be loaded."
-        )
+        # Plot the curve
+        chart = alt.Chart(curve_data).mark_line(color="#4C9AFF", strokeWidth=3).encode(
+            x=alt.X('x', scale=alt.Scale(domain=[-50, 50]), title="Horizontal coordinate x"),
+            y=alt.Y('y', scale=alt.Scale(zero=False), title="Predicted boundary y")
+        ).interactive()
+
+        st.altair_chart(chart, use_container_width=True)
+        st.success(f"Reconstructed boundary for λ = {lambda_value:.2f} and α = {alpha_value:.2f}.")
+
+    except Exception as error:
+        st.error("An error occurred while reconstructing the boundary.")
+        st.code(str(error))
+else:
+    st.warning(
+        "Boundary reconstruction is unavailable because the model or "
+        "scaling parameters could not be loaded."
+    )
 
 # ============================================================
 # MODEL COMPARISON
@@ -338,7 +338,6 @@ if st.button("Run Full Simulation"):
             f"over {current_step} steps."
         )
         
-        # --- THIS IS THE FIX ---
         # Filter the data so outliers don't zoom the graph out
         filtered_data = demonstration_data[
             (demonstration_data["x"] >= -50) & 
@@ -347,7 +346,6 @@ if st.button("Run Full Simulation"):
             (demonstration_data["y"] <= 100)
         ]
 
-        # Plot the filtered data
         chart = alt.Chart(filtered_data).mark_circle(size=40, opacity=0.7, color="#4C9AFF").encode(
             x=alt.X('x', scale=alt.Scale(domain=[-50, 50]), title="Horizontal coordinate x"),
             y=alt.Y('y', scale=alt.Scale(domain=[-100, 100]), title="Boundary coordinate y"),
@@ -356,48 +354,9 @@ if st.button("Run Full Simulation"):
 
         st.altair_chart(chart, use_container_width=True)
         
-        # Let the user know if we hid some extreme jumps
         hidden_count = len(demonstration_data) - len(filtered_data)
         if hidden_count > 0:
             st.info(f"Note: {hidden_count} extreme long-range jumps were hidden from the plot to keep the view centered.")
-
-# ============================================================
-# ABOUT THE PROJECT
-# ============================================================
-
-st.header("About the Project")
-st.markdown(
-    """
-    This application supports research on the asymptotic growth
-    geometry of a **long-range Contact Process**.
-
-    The Contact Process is a stochastic interacting-particle system
-    in which occupied sites may recover while infection spreads to
-    other sites.
-
-    In the long-range version, infection can spread beyond immediate
-    neighbouring sites. The parameter **α** controls the long-range
-    behaviour of the infection mechanism.
-
-    The neural network acts as a **surrogate model**, learning the
-    relationship between:
-
-    - infection parameter **λ**,
-    - long-range exponent **α**,
-    - horizontal boundary coordinate **x**,
-
-    and the resulting vertical boundary coordinate **y**.
-    """
-)
-
-st.markdown(
-    """
-    ### Research Question
-
-    **Can machine-learning surrogate models efficiently predict the
-    boundary geometry generated by a long-range Contact Process?**
-    """
-)
 
 # ============================================================
 # DATA STRUCTURES & OBJECT-ORIENTED PROGRAMMING (OOP)
