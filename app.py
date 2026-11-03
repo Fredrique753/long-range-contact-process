@@ -337,7 +337,7 @@ if st.button("Run Full Simulation"):
                 infected_sites.append(target)
                 ever_infected.add(target)
                 
-            # 2. Recovery attempt
+            # 2. Recovery attempt (based on lambda parameter)
             if random.random() < (1 - lambda_value) and len(infected_sites) > 1:
                 recovered_site = random.choice(infected_sites)
                 infected_sites.remove(recovered_site)
@@ -351,15 +351,14 @@ if st.button("Run Full Simulation"):
             f"over {current_step} steps."
         )
         
-        # Display interactive map. 
-        # We use st.scatter_chart and manually set the x-axis range to match your model's training data (-50 to 50).
         st.scatter_chart(
             demonstration_data, 
             x="x", 
             y="y",
             use_container_width=True,
-            color="#4C9AFF" # A nice blue color
+            color="#4C9AFF"
         )
+
 # ============================================================
 # ABOUT THE PROJECT
 # ============================================================
