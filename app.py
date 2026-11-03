@@ -306,7 +306,7 @@ st.markdown(
 )
 
 # Add a slider for the number of simulation steps
-steps = st.slider("Number of simulation steps", min_value=100, max_value=5000, value=1000, step=100)
+steps = st.slider("Number of simulation steps", min_value=100, max_value=10000, value=2000, step=100)
 
 if st.button("Run Full Simulation"):
     with st.spinner("Simulating infection spread..."):
@@ -315,22 +315,17 @@ if st.button("Run Full Simulation"):
         infected_sites = [(0, 0)]
         ever_infected = {(0, 0)}
         
-        # We use a while loop to represent time steps (generations)
         current_step = 0
         
         while current_step < steps:
-            # If the infection dies out completely, stop early
             if len(infected_sites) == 0:
                 break
                 
-            # Pick a random infected site to act as the source
             source = random.choice(infected_sites)
             
             # 1. Infection attempt (Long-range jump)
             u = random.random()
-            # The inverse transform sampling for a heavy-tailed distribution
             radius = (1 - u) ** (-1 / (alpha_value - 2))
-            
             theta = random.uniform(0, 2 * math.pi)
             
             dx = int(round(radius * math.cos(theta)))
@@ -338,39 +333,33 @@ if st.button("Run Full Simulation"):
             
             target = (source[0] + dx, source[1] + dy)
             
-            # If the target hasn't been infected yet, add it
             if target not in ever_infected:
                 infected_sites.append(target)
                 ever_infected.add(target)
                 
-            # 2. Recovery attempt (based on lambda parameter)
-            # Higher lambda = lower recovery rate
+            # 2. Recovery attempt
             if random.random() < (1 - lambda_value) and len(infected_sites) > 1:
                 recovered_site = random.choice(infected_sites)
                 infected_sites.remove(recovered_site)
                 
             current_step += 1
 
-        # Convert results to a DataFrame
-        demonstration_data = pd.DataFrame(
-            list(ever_infected),
-            columns=["x", "y"]
-        )
+        demonstration_data = pd.DataFrame(list(ever_infected), columns=["x", "y"])
 
-        # Display results
         st.success(
             f"Simulation complete! Generated **{len(ever_infected)}** unique infected sites "
             f"over {current_step} steps."
         )
         
-        # Display interactive map
+        # Display interactive map. 
+        # We use st.scatter_chart and manually set the x-axis range to match your model's training data (-50 to 50).
         st.scatter_chart(
             demonstration_data, 
             x="x", 
             y="y",
-            use_container_width=True
+            use_container_width=True,
+            color="#4C9AFF" # A nice blue color
         )
-
 # ============================================================
 # ABOUT THE PROJECT
 # ============================================================
